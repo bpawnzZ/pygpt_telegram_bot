@@ -1,11 +1,8 @@
 from typing import Optional, Any
-
 import pymongo
 import uuid
 from datetime import datetime
-
 import config
-
 
 class Database:
     def __init__(self):
