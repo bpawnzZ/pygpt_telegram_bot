@@ -1,16 +1,10 @@
 # ChatGPT Telegram Bot: **GPT-4. Fast. No daily limits. Special chat modes**
 
-<div align="center">
-<img src="https://raw.githubusercontent.com/karfly/chatgpt_telegram_bot/main/static/header.png" align="center" style="width: 100%" />
-</div>
-
 <br>
 
 We all love [chat.openai.com](https://chat.openai.com), but... It's TERRIBLY laggy, has daily limits, and is only accessible through an archaic web interface.
 
 This repo is ChatGPT re-created as Telegram Bot. **And it works great.**
-
-You can deploy your own bot, or use mine: [@chatgpt_karfly_bot](https://t.me/chatgpt_karfly_bot)
 
 ## Features
 - Low latency replies (it usually takes about 3-5 seconds)
@@ -53,38 +47,6 @@ You can deploy your own bot, or use mine: [@chatgpt_karfly_bot](https://t.me/cha
     docker-compose --env-file config/config.env up --build
     ```
 
-## ❤️ Top donations
-You can be in this list:
-
-1. [LilRocco](https://t.me/LilRocco). Donation: **11000$** (!!!)
-
-1. [Mr V](https://t.me/mr_v_v_v). Donation **250$**
-
-1. [unexpectedsunday](https://t.me/unexpectedsunday). Donation: **150$**
-
-1. [Sem](https://t.me/sembrestels). Donation: **100$**
-
-1. [Miksolo](https://t.me/Miksolo). Donation: **81$**
-
-    *Message:* Thank you. Using this docker container every day! Actually created the same project but its good to see that this one is being supported often. Will continue using it! Good architecture choices made in the code 💪!
-
-1. [Ryo](https://t.me/ryokihara). Donation: **80$**
-
-1. [Ilias Ism](https://twitter.com/illyism). Donation: **69$**
-
-    *Message:* I wanted to thank you for your amazing code! It helped me start my own Telegram ChatGPT bot and add a bunch of cool features. I really appreciate your hard work on this project. For anyone interested in trying my bot, feel free to check it out here: [magicbuddy.chat](https://magicbuddy.chat) 🤖 Thanks again! 😊
-
-1. [Sebastian](https://t.me/dell1503). Donation: **55$**
-
-1. [Alexander Zimin](https://t.me/azimin). Donation: **50$**
-
-1. [Kbaji20](https://t.me/Kbaji20). Donation: **30$**
-
-1. [Hans Blinken](https://t.me/hblink). Donation: **10$**
-
 ## Contributors
 - Main contributor: @karfly
 - [Jadve AI](https://jadve.com).
-
-## References
-1. [*Build ChatGPT from GPT-3*](https://learnprompting.org/docs/applied_prompting/build_chatgpt)
