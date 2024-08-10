@@ -30,7 +30,6 @@ from telegram.constants import ParseMode, ChatAction
 
 import config
 import database
-import openai_utils
 import gpt_service
 
 # setup
@@ -227,7 +226,7 @@ async def _vision_message_handle_fn(update: Update, context: CallbackContext, us
             config.chat_modes[chat_mode]["parse_mode"]
         ]
 
-        chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+        chatgpt_instance = gpt_service.GptService(model=current_model)
         if config.enable_message_streaming:
             gen = chatgpt_instance.send_vision_message_stream(
                 message,
@@ -389,7 +388,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 "markdown": ParseMode.MARKDOWN
             }[config.chat_modes[chat_mode]["parse_mode"]]
 
-            chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+            chatgpt_instance = gpt_service.GptService(model=current_model)
             if config.enable_message_streaming:
                 gen = chatgpt_instance.send_message_stream(_message, dialog_messages=dialog_messages, chat_mode=chat_mode)
             else:
@@ -520,7 +519,7 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     buf.name = "voice.oga"  # file extension is required
     buf.seek(0)  # move cursor to the beginning of the buffer
 
-    transcribed_text = await openai_utils.transcribe_audio(buf)
+    transcribed_text = await gpt_service.GptService.transcribe_audio(buf)
     text = f"🎤: <i>{transcribed_text}</i>"
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
@@ -543,7 +542,8 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
     message = message or update.message.text
 
     try:
-        image_urls = await openai_utils.generate_images(message, n_images=config.return_n_generated_images, size=config.image_size)
+        image_urls = await gpt_service.GptService.generate_images(message, n_images=config.return_n_generated_images,\
+                                                                  size=config.image_size)
     except openai.error.InvalidRequestError as e:
         if str(e).startswith("Your request was rejected as a result of our safety system"):
             text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh?"
@@ -586,7 +586,6 @@ async def cancel_handle(update: Update, context: CallbackContext):
         task.cancel()
     else:
         await update.message.reply_text("<i>Nothing to cancel...</i>", parse_mode=ParseMode.HTML)
-
 
 def get_chat_mode_menu(page_index: int):
     n_chat_modes_per_page = config.n_chat_modes_per_page
