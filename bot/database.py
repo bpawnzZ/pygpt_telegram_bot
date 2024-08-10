@@ -21,14 +21,8 @@ class Database:
             else:
                 return False
 
-    def add_new_user(
-        self,
-        user_id: int,
-        chat_id: int,
-        username: str = "",
-        first_name: str = "",
-        last_name: str = "",
-    ):
+    def add_new_user(self, user_id: int, chat_id: int, username: str = "",\
+                     first_name: str = "", last_name: str = "",):
         user_dict = {
             "_id": user_id,
             "chat_id": chat_id,

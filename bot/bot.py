@@ -6,6 +6,7 @@ import html
 import json
 from datetime import datetime
 import openai
+import base64
 
 import telegram
 from telegram import (
@@ -29,9 +30,7 @@ from telegram.constants import ParseMode, ChatAction
 
 import config
 import database
-import openai_utils
-
-import base64
+import gpt_service
 
 # setup
 db = database.Database()
@@ -69,29 +68,48 @@ def split_text_into_chunks(text, chunk_size):
     for i in range(0, len(text), chunk_size):
         yield text[i:i + chunk_size]
 
+async def is_bot_mentioned(update: Update, context: CallbackContext):
+    try:
+        message = update.message
+
+        if message.chat.type == "private":
+            return True
+
+        if message.text is not None and ("@" + context.bot.username) in message.text:
+            return True
+
+        if message.reply_to_message is not None:
+            if message.reply_to_message.from_user.id == context.bot.id:
+                return True
+    except:
+        return True
+    else:
+        return False
 
 async def register_user_if_not_exists(update: Update, context: CallbackContext, user: User):
-    if not db.check_if_user_exists(user.id):
+    user_id = user.id
+
+    if not db.check_if_user_exists(user_id):
         db.add_new_user(
-            user.id,
+            user_id,
             update.message.chat_id,
             username=user.username,
             first_name=user.first_name,
             last_name= user.last_name
         )
-        db.start_new_dialog(user.id)
+        db.start_new_dialog(user_id)
 
-    if db.get_user_attribute(user.id, "current_dialog_id") is None:
-        db.start_new_dialog(user.id)
+    if db.get_user_attribute(user_id, "current_dialog_id") is None:
+        db.start_new_dialog(user_id)
 
-    if user.id not in user_semaphores:
-        user_semaphores[user.id] = asyncio.Semaphore(1)
+    if user_id not in user_semaphores:
+        user_semaphores[user_id] = asyncio.Semaphore(1)
 
-    if db.get_user_attribute(user.id, "current_model") is None:
-        db.set_user_attribute(user.id, "current_model", config.models["available_text_models"][0])
+    if db.get_user_attribute(user_id, "current_model") is None:
+        db.set_user_attribute(user_id, "current_model", config.models["available_text_models"][0])
 
     # back compatibility for n_used_tokens field
-    n_used_tokens = db.get_user_attribute(user.id, "n_used_tokens")
+    n_used_tokens = db.get_user_attribute(user_id, "n_used_tokens")
     if isinstance(n_used_tokens, int) or isinstance(n_used_tokens, float):  # old format
         new_n_used_tokens = {
             "gpt-3.5-turbo": {
@@ -99,35 +117,15 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
                 "n_output_tokens": n_used_tokens
             }
         }
-        db.set_user_attribute(user.id, "n_used_tokens", new_n_used_tokens)
+        db.set_user_attribute(user_id, "n_used_tokens", new_n_used_tokens)
 
     # voice message transcription
-    if db.get_user_attribute(user.id, "n_transcribed_seconds") is None:
-        db.set_user_attribute(user.id, "n_transcribed_seconds", 0.0)
+    if db.get_user_attribute(user_id, "n_transcribed_seconds") is None:
+        db.set_user_attribute(user_id, "n_transcribed_seconds", 0.0)
 
     # image generation
-    if db.get_user_attribute(user.id, "n_generated_images") is None:
-        db.set_user_attribute(user.id, "n_generated_images", 0)
-
-
-async def is_bot_mentioned(update: Update, context: CallbackContext):
-     try:
-         message = update.message
-
-         if message.chat.type == "private":
-             return True
-
-         if message.text is not None and ("@" + context.bot.username) in message.text:
-             return True
-
-         if message.reply_to_message is not None:
-             if message.reply_to_message.from_user.id == context.bot.id:
-                 return True
-     except:
-         return True
-     else:
-         return False
-
+    if db.get_user_attribute(user_id, "n_generated_images") is None:
+        db.set_user_attribute(user_id, "n_generated_images", 0)
 
 async def start_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
@@ -145,13 +143,14 @@ async def start_handle(update: Update, context: CallbackContext):
 
 async def help_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
+
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
     await update.message.reply_text(HELP_MESSAGE, parse_mode=ParseMode.HTML)
 
-
 async def help_group_chat_handle(update: Update, context: CallbackContext):
      await register_user_if_not_exists(update, context, update.message.from_user)
+
      user_id = update.message.from_user.id
      db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
@@ -160,9 +159,9 @@ async def help_group_chat_handle(update: Update, context: CallbackContext):
      await update.message.reply_text(text, parse_mode=ParseMode.HTML)
      # TODO: await update.message.reply_video(config.help_group_chat_video_path)
 
-
 async def retry_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
+
     if await is_previous_message_not_answered_yet(update, context): return
 
     user_id = update.message.from_user.id
@@ -178,10 +177,9 @@ async def retry_handle(update: Update, context: CallbackContext):
 
     await message_handle(update, context, message=last_dialog_message["user"], use_new_dialog_timeout=False)
 
-async def _vision_message_handle_fn(
-    update: Update, context: CallbackContext, use_new_dialog_timeout: bool = True
-):
+async def _vision_message_handle_fn(update: Update, context: CallbackContext, use_new_dialog_timeout: bool = True):
     logger.info('_vision_message_handle_fn')
+
     user_id = update.message.from_user.id
     current_model = db.get_user_attribute(user_id, "current_model")
 
@@ -228,7 +226,7 @@ async def _vision_message_handle_fn(
             config.chat_modes[chat_mode]["parse_mode"]
         ]
 
-        chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+        chatgpt_instance = gpt_service.GptService(model=current_model)
         if config.enable_message_streaming:
             gen = chatgpt_instance.send_vision_message_stream(
                 message,
@@ -390,7 +388,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 "markdown": ParseMode.MARKDOWN
             }[config.chat_modes[chat_mode]["parse_mode"]]
 
-            chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+            chatgpt_instance = gpt_service.GptService(model=current_model)
             if config.enable_message_streaming:
                 gen = chatgpt_instance.send_message_stream(_message, dialog_messages=dialog_messages, chat_mode=chat_mode)
             else:
@@ -521,7 +519,7 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     buf.name = "voice.oga"  # file extension is required
     buf.seek(0)  # move cursor to the beginning of the buffer
 
-    transcribed_text = await openai_utils.transcribe_audio(buf)
+    transcribed_text = await gpt_service.GptService.transcribe_audio(buf)
     text = f"🎤: <i>{transcribed_text}</i>"
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
@@ -533,6 +531,7 @@ async def voice_message_handle(update: Update, context: CallbackContext):
 
 async def generate_image_handle(update: Update, context: CallbackContext, message=None):
     await register_user_if_not_exists(update, context, update.message.from_user)
+    
     if await is_previous_message_not_answered_yet(update, context): return
 
     user_id = update.message.from_user.id
@@ -543,7 +542,8 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
     message = message or update.message.text
 
     try:
-        image_urls = await openai_utils.generate_images(message, n_images=config.return_n_generated_images, size=config.image_size)
+        image_urls = await gpt_service.GptService.generate_images(message, n_images=config.return_n_generated_images,\
+                                                                  size=config.image_size)
     except openai.error.InvalidRequestError as e:
         if str(e).startswith("Your request was rejected as a result of our safety system"):
             text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh?"
@@ -586,7 +586,6 @@ async def cancel_handle(update: Update, context: CallbackContext):
         task.cancel()
     else:
         await update.message.reply_text("<i>Nothing to cancel...</i>", parse_mode=ParseMode.HTML)
-
 
 def get_chat_mode_menu(page_index: int):
     n_chat_modes_per_page = config.n_chat_modes_per_page
@@ -732,7 +731,6 @@ async def set_settings_handle(update: Update, context: CallbackContext):
         if str(e).startswith("Message is not modified"):
             pass
 
-
 async def show_balance_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
 
@@ -772,19 +770,16 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
     total_n_spent_dollars += voice_recognition_n_spent_dollars
 
-
     text = f"You spent <b>{total_n_spent_dollars:.03f}$</b>\n"
     text += f"You used <b>{total_n_used_tokens}</b> tokens\n\n"
     text += details_text
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
-
 async def edited_message_handle(update: Update, context: CallbackContext):
     if update.edited_message.chat.type == "private":
         text = "🥲 Unfortunately, message <b>editing</b> is not supported"
         await update.edited_message.reply_text(text, parse_mode=ParseMode.HTML)
-
 
 async def error_handle(update: Update, context: CallbackContext) -> None:
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -816,7 +811,7 @@ async def post_init(application: Application):
         BotCommand("/new", "Start new dialog"),
         BotCommand("/mode", "Select chat mode"),
         BotCommand("/retry", "Re-generate response for previous query"),
-        BotCommand("/balance", "Show balance"),
+        # BotCommand("/balance", "Show balance"),
         BotCommand("/settings", "Show settings"),
         BotCommand("/help", "Show help message"),
     ])
@@ -863,7 +858,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
 
-    application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
 
     application.add_error_handler(error_handle)
 
